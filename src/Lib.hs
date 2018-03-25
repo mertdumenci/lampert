@@ -4,7 +4,6 @@ module Lib (
 
 import qualified Formula as F
 
--- All x ((Exists y s.t. p(x, y)) and p(x, z)) implies (Exists w s.t. p(x, w))
 randomFormula :: F.Formula
 randomFormula =
     F.All [x] (
@@ -31,3 +30,4 @@ someFunc :: IO ()
 someFunc = do
     putStrLn $ show randomFormula
     putStrLn $ show $ F.nnf randomFormula
+    putStrLn $ show $ F.bound randomFormula

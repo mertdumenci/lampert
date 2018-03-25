@@ -2,16 +2,21 @@
 module Formula (
     Term (..),
     Formula (..),
-    nnf
+    nnf,
+    free,
+    bound,
+    vars
 ) where
 
 import Data.List
 import Data.Char
+import qualified Data.Set as S
 
 data Term =
     Constant String
     | Variable String
     | Function String [Term]
+    deriving (Eq, Ord)
 
 instance Show Term where
     show (Constant n) = map toUpper n
@@ -33,6 +38,7 @@ data Formula =
     -- Quantifiers
     | Exists [Term] Formula
     | All [Term] Formula
+    deriving (Eq, Ord)
 
 instance Show Formula where
     show f = case f of
@@ -54,6 +60,43 @@ instance Show Formula where
             "E" ++ (intercalate ", " $ map show ts) ++ ". (" ++ show f' ++ ")"
         All ts f' ->
             "A" ++ (intercalate ", " $ map show ts) ++ ". (" ++ show f' ++ ")"
+
+vars :: Formula -> S.Set Term
+vars f =
+    vars' f S.empty
+    where
+        folder s v@(Variable _) = S.insert v s
+        folder s _ = s
+
+        vars' (Predicate _ ts) s = foldl folder s ts
+        vars' (Negation f') s = vars' f' s
+        vars' (Conjunction fa fb) s = S.union (vars' fa s) (vars' fb s)
+        vars' (Disjunction fa fb) s = S.union (vars' fa s) (vars' fb s)
+        vars' (Implication fa fb) s = S.union (vars' fa s) (vars' fb s)
+        vars' (Iff fa fb) s = S.union (vars' fa s) (vars' fb s)
+        vars' (Exists _ f') s = vars' f' s
+        vars' (All _ f') s = vars' f' s
+        vars' _ s = s
+
+bound :: Formula -> S.Set Term
+bound f = 
+    bound' f S.empty
+    where
+        folder s v@(Variable _) = S.insert v s
+        folder s _ = s
+
+        bound' (Exists ts f') s = S.union (foldl folder s ts) (bound' f' s)
+        bound' (All ts f') s = S.union (foldl folder s ts) (bound' f' s)
+        bound' (Negation f') s = bound' f' s
+        bound' (Conjunction fa fb) s = S.union (bound' fa s) (bound' fb s)
+        bound' (Disjunction fa fb) s = S.union (bound' fa s) (bound' fb s)
+        bound' (Implication fa fb) s = S.union (bound' fa s) (bound' fb s)
+        bound' (Iff fa fb) s = S.union (bound' fa s) (bound' fb s)
+        bound' _ s = s
+
+free :: Formula -> S.Set Term
+free f =
+    S.difference (vars f) (bound f)
 
 nnf :: Formula -> Formula
 nnf f = case f of
