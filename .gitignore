@@ -1,3 +1,6 @@
 .stack-work/
 lampert.cabal
 *~
+
+# VSCode
+tasks.json

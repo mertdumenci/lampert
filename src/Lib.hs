@@ -1,6 +1,33 @@
-module Lib
-    ( someFunc
-    ) where
+module Lib (
+    someFunc
+) where
+
+import qualified Formula as F
+
+-- All x ((Exists y s.t. p(x, y)) and p(x, z)) implies (Exists w s.t. p(x, w))
+randomFormula :: F.Formula
+randomFormula =
+    F.All [x] (
+        F.Implication (
+            F.Exists [y] (
+                F.Conjunction (
+                    F.Predicate "p" [x, y]
+                ) (
+                    F.Predicate "p" [x, z]
+                )
+            )
+        ) (
+            F.Exists [w] (
+                F.Predicate "p" [x, w]
+            )
+        )
+    )
+    where x = F.Variable "x"
+          y = F.Variable "y"
+          z = F.Variable "z"
+          w = F.Variable "w"
 
 someFunc :: IO ()
-someFunc = putStrLn "someFunc"
+someFunc = do
+    putStrLn $ show randomFormula
+    putStrLn $ show $ F.nnf randomFormula
