@@ -6,9 +6,9 @@ import qualified Formula as F
 
 randomFormula :: F.Formula
 randomFormula =
-    F.All [x] (
+    F.All x (
         F.Implication (
-            F.Exists [y] (
+            F.Exists y (
                 F.Conjunction (
                     F.Predicate "p" [x, y]
                 ) (
@@ -16,7 +16,7 @@ randomFormula =
                 )
             )
         ) (
-            F.Exists [w] (
+            F.Exists w (
                 F.Predicate "p" [x, w]
             )
         )
@@ -30,4 +30,4 @@ someFunc :: IO ()
 someFunc = do
     putStrLn $ show randomFormula
     putStrLn $ show $ F.nnf randomFormula
-    putStrLn $ show $ F.bound randomFormula
+    putStrLn $ show $ F.miniscope . F.nnf $ randomFormula

@@ -3,9 +3,7 @@ module Formula (
     Term (..),
     Formula (..),
     nnf,
-    free,
-    bound,
-    vars
+    miniscope
 ) where
 
 import Data.List
@@ -36,8 +34,8 @@ data Formula =
     | Implication Formula Formula
     | Iff Formula Formula
     -- Quantifiers
-    | Exists [Term] Formula
-    | All [Term] Formula
+    | Exists Term Formula
+    | All Term Formula
     deriving (Eq, Ord)
 
 instance Show Formula where
@@ -56,10 +54,10 @@ instance Show Formula where
             show fa ++ " → " ++ show fb
         Iff fa fb ->
             show fa ++ " ⇔ " ++ show fb
-        Exists ts f' ->
-            "E" ++ (intercalate ", " $ map show ts) ++ ". (" ++ show f' ++ ")"
-        All ts f' ->
-            "A" ++ (intercalate ", " $ map show ts) ++ ". (" ++ show f' ++ ")"
+        Exists t f' ->
+            "E" ++ show t ++ ". (" ++ show f' ++ ")"
+        All t f' ->
+            "A" ++ show t ++ ". (" ++ show f' ++ ")"
 
 vars :: Formula -> S.Set Term
 vars f =
@@ -82,11 +80,8 @@ bound :: Formula -> S.Set Term
 bound f = 
     bound' f S.empty
     where
-        folder s v@(Variable _) = S.insert v s
-        folder s _ = s
-
-        bound' (Exists ts f') s = S.union (foldl folder s ts) (bound' f' s)
-        bound' (All ts f') s = S.union (foldl folder s ts) (bound' f' s)
+        bound' (Exists t f') s = S.insert t (bound' f' s)
+        bound' (All t f') s = S.insert t (bound' f' s)
         bound' (Negation f') s = bound' f' s
         bound' (Conjunction fa fb) s = S.union (bound' fa s) (bound' fb s)
         bound' (Disjunction fa fb) s = S.union (bound' fa s) (bound' fb s)
@@ -107,10 +102,10 @@ nnf f = case f of
         Disjunction (nnf $ Negation fa) (nnf $ Negation fb)
     Negation (Disjunction fa fb) ->
         Conjunction (nnf $ Negation fa) (nnf $ Negation fb)
-    Negation (All ts f') ->
-        Exists ts (nnf $ Negation f')
-    Negation (Exists ts f') ->
-        All ts (nnf $ Negation f')
+    Negation (All t f') ->
+        Exists t (nnf $ Negation f')
+    Negation (Exists t f') ->
+        All t (nnf $ Negation f')
     Implication fa fb ->
         Disjunction (nnf $ Negation fa) (nnf fb)
     Iff fa fb ->
@@ -124,10 +119,52 @@ nnf f = case f of
         Conjunction (nnf fa) (nnf fb)
     Disjunction fa fb ->
         Disjunction (nnf fa) (nnf fb)
-    Exists ts f' ->
-        Exists ts (nnf f')
-    All ts f' ->
-        All ts (nnf f')
+    Exists t f' ->
+        Exists t (nnf f')
+    All t f' ->
+        All t (nnf f')
 
     _ -> f
+
+miniscope f = case f of
+    Conjunction (All t fa) (All t' fb) ->
+        if (t == t')
+            then (All t $ miniscope (Conjunction fa fb))
+            else All t $ All t' $ Conjunction fa fb
+    Disjunction (Exists t fa) (Exists t' fb) ->
+        if (t == t')
+            then (Exists t $ miniscope (Disjunction fa fb))
+            else Exists t $ Exists t' $ Disjunction fa fb
+    Conjunction fa (All t fb) ->
+        All t $ miniscope (Conjunction fa fb)
+    Conjunction (All t fa) fb ->
+        All t $ miniscope (Conjunction fa fb)
+    Conjunction fa (Exists t fb) ->
+        Exists t $ miniscope (Conjunction fa fb)
+    Conjunction (Exists t fa) fb ->
+        Exists t $ miniscope (Conjunction fa fb)
+    Disjunction fa (All t fb) ->
+        All t $ miniscope (Disjunction fa fb)
+    Disjunction (All t fa) fb ->
+        All t $ miniscope (Disjunction fa fb)
+    Disjunction fa (Exists t fb) ->
+        Exists t $ miniscope (Disjunction fa fb)
+    Disjunction (Exists t fa) fb ->
+        Exists t $ miniscope (Disjunction fa fb)
     
+    Negation f' ->
+        Negation $ miniscope f'
+    Conjunction fa fb ->
+        Conjunction (miniscope fa) (miniscope fb)
+    Disjunction fa fb ->
+        Disjunction (miniscope fa) (miniscope fb)
+    Implication fa fb ->
+        Implication (miniscope fa) (miniscope fb)
+    Iff fa fb ->
+        Iff (miniscope fa) (miniscope fb)
+    Exists t f' ->
+        Exists t $ miniscope f'
+    All t f' ->
+        All t $ miniscope f'
+
+    _ -> f
