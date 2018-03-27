@@ -1,3 +1,4 @@
+
 module Lib (
     someFunc
 ) where
@@ -93,12 +94,25 @@ formula6 =
     where x = F.Variable "x"
           y = F.Variable "y"
 
+formula7 :: F.Formula
+formula7 =
+    F.Exists y
+        (F.Exists x
+            (F.And
+                (F.Or (F.Pred "Q" [y]) (F.Pred "P" [x]))
+                (F.Pred "P" [x])
+            )
+        )
+    where   x = F.Variable "x"
+            y = F.Variable "y"
+
 someFunc :: IO ()
 someFunc = do
-    let n2 = F.nnf formula2
-    putStrLn $ "NNF formula " ++ show n2
-    let m2 = F.miniscope n2
-    putStrLn $ "Miniscoped formula " ++ show m2
-    let r2 = F.rename formula6
-    putStrLn $ "Renamed formula " ++ show r2
-
+    -- let n2 = F.nnf formula2
+    -- putStrLn $ "NNF formula " ++ show n2
+    -- let m2 = F.miniscope n2
+    -- putStrLn $ "Miniscoped formula " ++ show m2
+    -- let r2 = F.rename formula6
+    -- putStrLn $ "Renamed formula " ++ show r2
+    putStrLn $ "Original formula: " ++ show formula7
+    putStrLn $ "Quantifier sorted: " ++ show (F.quantifierSort formula7)

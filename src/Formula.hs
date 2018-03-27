@@ -6,11 +6,7 @@ module Formula (
     Formula (..),
     nnf,
     miniscope,
-    partialPrenex,
-    rename,
-    mapVariable,
-    freshVariable,
-    replaceVariable
+    quantifierSort
 ) where
 
 import qualified Data.List as L
@@ -27,8 +23,8 @@ instance Show Term where
     show (Constant n) = L.map toUpper n
     show (Variable n) = L.map toLower n
     show (Function n ts) =
-        L.map toLower n ++ "(" ++ (L.intercalate ", " $ L.map show ts) ++ ")"
-    
+        L.map toLower n ++ "(" ++ L.intercalate ", " (L.map show ts) ++ ")"
+
 data Formula =
     -- Literals
     T
@@ -61,7 +57,7 @@ instance Show Formula where
         T -> "⊤"
         F -> "⊥"
         Pred n ts ->
-            L.map toUpper n ++ (L.intercalate "" $ L.map show ts)
+            L.map toUpper n ++ L.intercalate "" (L.map show ts)
         Not f' ->
             "!" ++ "(" ++ show f' ++ ")"
         And fa fb ->
@@ -95,7 +91,7 @@ vars f =
         vars' _ s = s
 
 bound :: Formula -> S.Set Term
-bound f = 
+bound f =
     bound' f S.empty
     where
         bound' (Exists t f') s = S.insert t (bound' f' s)
@@ -196,7 +192,7 @@ mapVariable m (All t p) = All (m t) (mapVariable m p)
 mapVariable m p = Formula.map (mapVariable m) p
 
 replaceVariable :: Term -> Term -> Formula -> Formula
-replaceVariable s d f = mapVariable (\t -> if t == s then d else t) f
+replaceVariable s d = mapVariable (\t -> if t == s then d else t)
 
 -- Renames variables in a formula s.t. no two different quantifiers bind
 -- the same variable. Used after a sequence of miniscoping and partial
@@ -215,3 +211,49 @@ rename' (Exists t f') i = Exists fv $ rename' (replaceVariable t fv f') (i + 1)
     where fv = freshVariable i
 rename' (All t f') i = All fv $ rename' (replaceVariable t fv f') (i + 1)
     where fv = freshVariable i
+
+-- | Returns the number of immediate disjuncts the given term is in.
+inNumDisj :: Formula -> Term -> Int
+inNumDisj (Or p q) t = inNumDisj p t + inNumDisj q t 
+inNumDisj p t = if p `binds` t then 1 else 0
+
+-- | Returns the number of immediate conjuncts the given term is in.
+inNumConj :: Formula -> Term -> Int
+inNumConj (And p q) t = inNumConj p t + inNumConj q t
+inNumConj p t = if p `binds` t then 1 else 0
+
+-- | Deconstructs a sequence of `Exists`s.
+type ExistsP = (Int, Term)
+deconsSeqExists :: Formula -> ([ExistsP], Formula)
+deconsSeqExists (Exists ta (Exists tb p)) =
+    ([(inNumConj p ta, ta), (inNumConj p tb, tb)] ++ fst (deconsSeqExists p), p)
+deconsSeqExists (Exists ta p) = ([(inNumConj p ta, ta)], p)
+deconsSeqExists f = ([], f)
+
+-- | Reconstructs a `Formula` from the output of `deconsSeqExists`.
+reconsSeqExists :: [ExistsP] -> Formula -> Formula
+reconsSeqExists ((_, t):ds) p = Exists t (reconsSeqExists ds p)
+reconsSeqExists [] p = p
+
+-- | Deconstructs a sequence of `All`s.
+type AllP = (Int, Term)
+deconsSeqAll :: Formula -> ([AllP], Formula)
+deconsSeqAll (All ta (All tb p)) =
+    ([(inNumConj p ta, ta), (inNumConj p tb, tb)] ++ fst (deconsSeqAll p), p)
+deconsSeqAll (All ta p) = ([(inNumConj p ta, ta)], p)
+deconsSeqAll f = ([], f)
+
+-- | Reconstructs a `Formula` from the output of `deconsSeqAll`.
+reconsSeqAll :: [AllP] -> Formula -> Formula
+reconsSeqAll ((_, t):ds) p = All t (reconsSeqAll ds p)
+reconsSeqAll [] p = p
+
+-- | Sort the quantifiers of a `Formula`. (Prenex sorting)
+quantifierSort :: Formula -> Formula
+quantifierSort f@(Exists _ (Exists _ p)) =
+    reconsSeqExists st (quantifierSort p)
+    where st = reverse (L.sortOn fst (fst (deconsSeqExists f)))
+quantifierSort f@(All _ (All _ p)) =
+    reconsSeqAll st (quantifierSort p)
+    where st = reverse (L.sortOn fst (fst (deconsSeqAll f)))
+quantifierSort f = Formula.map quantifierSort f
