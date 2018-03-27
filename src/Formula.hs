@@ -1,12 +1,17 @@
 
+{-# LANGUAGE LambdaCase #-}
+
 module Formula (
     Term (..),
     Formula (..),
     nnf,
-    miniscope
+    miniscope,
+    free,
+    bound,
+    binds
 ) where
 
-import Data.List
+import qualified Data.List as L
 import Data.Char
 import qualified Data.Set as S
 
@@ -17,43 +22,54 @@ data Term =
     deriving (Eq, Ord)
 
 instance Show Term where
-    show (Constant n) = map toUpper n
-    show (Variable n) = map toLower n
+    show (Constant n) = L.map toUpper n
+    show (Variable n) = L.map toLower n
     show (Function n ts) =
-        map toLower n ++ "(" ++ (intercalate ", " $ map show ts) ++ ")"
+        L.map toLower n ++ "(" ++ (L.intercalate ", " $ L.map show ts) ++ ")"
     
 data Formula =
     -- Literals
     T
     | F
-    | Predicate String [Term]
-    | Negation Formula
+    | Pred String [Term]
+    | Not Formula
     -- Binary connectives
-    | Conjunction Formula Formula
-    | Disjunction Formula Formula
-    | Implication Formula Formula
+    | And Formula Formula
+    | Or Formula Formula
+    | Impl Formula Formula
     | Iff Formula Formula
     -- Quantifiers
     | Exists Term Formula
     | All Term Formula
     deriving (Eq, Ord)
 
+map :: (Formula -> Formula) -> Formula -> Formula
+map f = \case
+    Not a -> Not (f a)
+    And a b -> And (f a) (f b)
+    Or a b -> Or (f a) (f b)
+    Impl a b -> Impl (f a) (f b)
+    Iff a b -> Iff (f a) (f b)
+    Exists t a -> Exists t (f a)
+    All t a -> All t (f a)
+    a -> a
+
 instance Show Formula where
-    show f = case f of
+    show = \case
         T -> "⊤"
         F -> "⊥"
-        Predicate n ts ->
-            map toLower n ++ "(" ++ (intercalate ", " $ map show ts) ++ ")"
-        Negation f' ->
-            "¬" ++ "(" ++ show f' ++ ")"
-        Conjunction fa fb ->
-            show fa ++ " ∧ " ++ show fb
-        Disjunction fa fb ->
-            show fa ++ " ∨ " ++ show fb
-        Implication fa fb ->
-            show fa ++ " → " ++ show fb
+        Pred n ts ->
+            L.map toUpper n ++ (L.intercalate "" $ L.map show ts)
+        Not f' ->
+            "!" ++ "(" ++ show f' ++ ")"
+        And fa fb ->
+            "(" ++ show fa ++ " ∧ " ++ show fb ++ ")"
+        Or fa fb ->
+            "(" ++ show fa ++ " ∨ " ++ show fb ++ ")"
+        Impl fa fb ->
+            show fa ++ " -> " ++ show fb
         Iff fa fb ->
-            show fa ++ " ⇔ " ++ show fb
+            show fa ++ " <-> " ++ show fb
         Exists t f' ->
             "E" ++ show t ++ ". (" ++ show f' ++ ")"
         All t f' ->
@@ -66,11 +82,11 @@ vars f =
         folder s v@(Variable _) = S.insert v s
         folder s _ = s
 
-        vars' (Predicate _ ts) s = foldl folder s ts
-        vars' (Negation f') s = vars' f' s
-        vars' (Conjunction fa fb) s = S.union (vars' fa s) (vars' fb s)
-        vars' (Disjunction fa fb) s = S.union (vars' fa s) (vars' fb s)
-        vars' (Implication fa fb) s = S.union (vars' fa s) (vars' fb s)
+        vars' (Pred _ ts) s = foldl folder s ts
+        vars' (Not f') s = vars' f' s
+        vars' (And fa fb) s = S.union (vars' fa s) (vars' fb s)
+        vars' (Or fa fb) s = S.union (vars' fa s) (vars' fb s)
+        vars' (Impl fa fb) s = S.union (vars' fa s) (vars' fb s)
         vars' (Iff fa fb) s = S.union (vars' fa s) (vars' fb s)
         vars' (Exists _ f') s = vars' f' s
         vars' (All _ f') s = vars' f' s
@@ -82,89 +98,54 @@ bound f =
     where
         bound' (Exists t f') s = S.insert t (bound' f' s)
         bound' (All t f') s = S.insert t (bound' f' s)
-        bound' (Negation f') s = bound' f' s
-        bound' (Conjunction fa fb) s = S.union (bound' fa s) (bound' fb s)
-        bound' (Disjunction fa fb) s = S.union (bound' fa s) (bound' fb s)
-        bound' (Implication fa fb) s = S.union (bound' fa s) (bound' fb s)
+        bound' (Not f') s = bound' f' s
+        bound' (And fa fb) s = S.union (bound' fa s) (bound' fb s)
+        bound' (Or fa fb) s = S.union (bound' fa s) (bound' fb s)
+        bound' (Impl fa fb) s = S.union (bound' fa s) (bound' fb s)
         bound' (Iff fa fb) s = S.union (bound' fa s) (bound' fb s)
         bound' _ s = s
 
 free :: Formula -> S.Set Term
-free f =
-    S.difference (vars f) (bound f)
+free f = S.difference (vars f) (bound f)
+
+binds :: Formula -> Term -> Bool
+binds f t = S.member t (vars f)
 
 nnf :: Formula -> Formula
-nnf f = case f of
-    Negation T -> F
-    Negation F -> T
-    Negation (Negation f') -> nnf f'
-    Negation (Conjunction fa fb) ->
-        Disjunction (nnf $ Negation fa) (nnf $ Negation fb)
-    Negation (Disjunction fa fb) ->
-        Conjunction (nnf $ Negation fa) (nnf $ Negation fb)
-    Negation (All t f') ->
-        Exists t (nnf $ Negation f')
-    Negation (Exists t f') ->
-        All t (nnf $ Negation f')
-    Implication fa fb ->
-        Disjunction (nnf $ Negation fa) (nnf fb)
-    Iff fa fb ->
-        Conjunction
-            (Implication (nnf fa) (nnf fb))
-            (Implication (nnf fb) (nnf fa))
-    
-    Negation f' ->
-        Negation (nnf f')
-    Conjunction fa fb ->
-        Conjunction (nnf fa) (nnf fb)
-    Disjunction fa fb ->
-        Disjunction (nnf fa) (nnf fb)
-    Exists t f' ->
-        Exists t (nnf f')
-    All t f' ->
-        All t (nnf f')
+nnf (Not T) = F
+nnf (Not F) = T
+nnf (Not (Not p)) = nnf p
+nnf (Not (And p q)) = Formula.map nnf $ Or (Not p) (Not q)
+nnf (Not (Or p q)) = Formula.map nnf $ And (Not p) (Not q)
+nnf (Not (Impl p q)) = Formula.map nnf $ And p (Not q)
+nnf (Not (Iff p q)) = Formula.map nnf $ Or (And p (Not q)) (And (Not p) q)
+nnf (Not (All t p)) = Formula.map nnf $ Exists t (Not p)
+nnf (Not (Exists t p)) = Formula.map nnf $ All t (Not p)
+nnf p = Formula.map nnf p
 
-    _ -> f
-
-miniscope f = case f of
-    Conjunction (All t fa) (All t' fb) ->
-        if (t == t')
-            then (All t $ miniscope (Conjunction fa fb))
-            else All t $ All t' $ Conjunction fa fb
-    Disjunction (Exists t fa) (Exists t' fb) ->
-        if (t == t')
-            then (Exists t $ miniscope (Disjunction fa fb))
-            else Exists t $ Exists t' $ Disjunction fa fb
-    Conjunction fa (All t fb) ->
-        All t $ miniscope (Conjunction fa fb)
-    Conjunction (All t fa) fb ->
-        All t $ miniscope (Conjunction fa fb)
-    Conjunction fa (Exists t fb) ->
-        Exists t $ miniscope (Conjunction fa fb)
-    Conjunction (Exists t fa) fb ->
-        Exists t $ miniscope (Conjunction fa fb)
-    Disjunction fa (All t fb) ->
-        All t $ miniscope (Disjunction fa fb)
-    Disjunction (All t fa) fb ->
-        All t $ miniscope (Disjunction fa fb)
-    Disjunction fa (Exists t fb) ->
-        Exists t $ miniscope (Disjunction fa fb)
-    Disjunction (Exists t fa) fb ->
-        Exists t $ miniscope (Disjunction fa fb)
-    
-    Negation f' ->
-        Negation $ miniscope f'
-    Conjunction fa fb ->
-        Conjunction (miniscope fa) (miniscope fb)
-    Disjunction fa fb ->
-        Disjunction (miniscope fa) (miniscope fb)
-    Implication fa fb ->
-        Implication (miniscope fa) (miniscope fb)
-    Iff fa fb ->
-        Iff (miniscope fa) (miniscope fb)
-    Exists t f' ->
-        Exists t $ miniscope f'
-    All t f' ->
-        All t $ miniscope f'
-
-    _ -> f
+miniscope :: Formula -> Formula
+miniscope f@(All t (And a b))
+        | a `binds` t && b `binds` t = And (All t a) (All t b)
+        | a `binds` t = And (All t a) b
+        | b `binds` t = And a (All t b)
+        | otherwise = f
+miniscope f@(Exists t (Or a b))
+        | a `binds` t && b `binds` t = Or (Exists t a) (Exists t b)
+        | a `binds` t = Or (Exists t a) b
+        | b `binds` t = Or a (Exists t b)
+        | otherwise = f
+miniscope f@(All t (Or a b))
+        | a `binds` t && b `binds` t = f
+        | a `binds` t = Or (All t a) b
+        | b `binds` t = Or a (All t b)
+        | otherwise = f
+miniscope f@(Exists t (And a b))
+        | a `binds` t && b `binds` t = f
+        | a `binds` t = And (Exists t a) b
+        | b `binds` t = And a (Exists t b)
+        | otherwise = f
+miniscope (All t f@(Exists _ _)) = miniscope (All t (miniscope f))
+miniscope (All t f@(All _ _)) = miniscope (All t (miniscope f))
+miniscope (Exists t f@(All _ _)) = miniscope (Exists t (miniscope f))
+miniscope (Exists t f@(Exists _ _)) = miniscope (Exists t (miniscope f))
+miniscope p = Formula.map miniscope p
