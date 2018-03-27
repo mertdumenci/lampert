@@ -6,7 +6,11 @@ module Formula (
     Formula (..),
     nnf,
     miniscope,
-    partialPrenex
+    partialPrenex,
+    rename,
+    mapVariable,
+    freshVariable,
+    replaceVariable
 ) where
 
 import qualified Data.List as L
@@ -109,17 +113,18 @@ free f = S.difference (vars f) (bound f)
 binds :: Formula -> Term -> Bool
 binds f t = S.member t (vars f)
 
+-- Number of quantifiers in a `Formula`.
 numQuantifiers :: Formula -> Int
 numQuantifiers T = 0
 numQuantifiers F = 0
 numQuantifiers (Pred _ _) = 0
-numQuantifiers (All _ f) i = numQuantifiers f + 1
+numQuantifiers (All _ f) = numQuantifiers f + 1
 numQuantifiers (Exists _ f) = numQuantifiers f + 1
-numQuantifiers (Not f) i = numQuantifiers f i
-numQuantifiers (And p q) i = numQuantifiers p i + numQuantifiers q i
-numQuantifiers (Or p q) i = numQuantifiers p i + numQuantifiers q i
-numQuantifiers (Impl p q) i = numQuantifiers p i + numQuantifiers q i
-numQuantifiers (Iff p q) = numQuantifiers p i + numQuantifiers q i
+numQuantifiers (Not f) = numQuantifiers f
+numQuantifiers (And p q) = numQuantifiers p + numQuantifiers q
+numQuantifiers (Or p q) = numQuantifiers p + numQuantifiers q
+numQuantifiers (Impl p q) = numQuantifiers p + numQuantifiers q
+numQuantifiers (Iff p q) = numQuantifiers p + numQuantifiers q
 
 -- Convert a Formula into Negation Normal Form (NNF.)
 nnf :: Formula -> Formula
@@ -177,6 +182,21 @@ partialPrenex p =
     where
         p' = Formula.map partialPrenex p
 
+-- TODO(mert): All fresh variables are named $k^(n)$. This is not ideal, find a
+-- better solution.
+freshVariable :: Int -> Term
+freshVariable i = Variable (newName i)
+    where newName 0 = "k"
+          newName n = newName (n - 1) ++ "'"
+
+mapVariable :: (Term -> Term) -> Formula -> Formula
+mapVariable m (Pred s ts) = Pred s (m <$> ts)
+mapVariable m (Exists t p) = Exists (m t) (mapVariable m p)
+mapVariable m (All t p) = All (m t) (mapVariable m p)
+mapVariable m p = Formula.map (mapVariable m) p
+
+replaceVariable :: Term -> Term -> Formula -> Formula
+replaceVariable s d f = mapVariable (\t -> if t == s then d else t) f
 
 -- Renames variables in a formula s.t. no two different quantifiers bind
 -- the same variable. Used after a sequence of miniscoping and partial
@@ -184,22 +204,8 @@ partialPrenex p =
 rename :: Formula -> Formula
 rename f = rename' f 1
 
--- TODO(mert): All fresh variables are named $k_x$. This is not ideal, find a
--- better solution.
-freshVariable :: Int -> Term
-freshVariable i = Variable ("k_" ++ show i)
-
-mapVariable :: (Term -> Term) -> Formula -> Formula
-mapVariable m (Pred s ts) = Pred s (m <$> ts)
-mapVariable m (Exists t p) = Exists (m t) p
-mapVariable m (All t p) = All (m t) p
-mapVariable m p = Formula.map (mapVariable m) p
-
-replaceVariable :: Term -> Term -> Formula -> Formula
-replaceVariable s d f = mapVariable (\t -> if t == s then d else t) f
-
 rename' :: Formula -> Int -> Formula
-rename' f@(Pred _ _) i = f
+rename' f@(Pred _ _) _ = f
 rename' (And p q) i = And (rename' p i) (rename' q (i + numQuantifiers p))
 rename' (Or p q) i = Or (rename' p i) (rename' q (i + numQuantifiers p))
 rename' (Impl p q) i = Impl (rename' p i) (rename' q (i + numQuantifiers p))

@@ -87,10 +87,18 @@ formula5 =
     where x = F.Variable "x"
           y = F.Variable "y"
 
+formula6 :: F.Formula
+formula6 =
+    F.All x (F.Exists x (F.Pred "P" [x, y]))
+    where x = F.Variable "x"
+          y = F.Variable "y"
+
 someFunc :: IO ()
 someFunc = do
     let n2 = F.nnf formula2
     putStrLn $ "NNF formula " ++ show n2
     let m2 = F.miniscope n2
     putStrLn $ "Miniscoped formula " ++ show m2
+    let r2 = F.rename formula6
+    putStrLn $ "Renamed formula " ++ show r2
 
