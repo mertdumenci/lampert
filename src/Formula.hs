@@ -6,9 +6,7 @@ module Formula (
     Formula (..),
     nnf,
     miniscope,
-    free,
-    bound,
-    binds
+    partialPrenex
 ) where
 
 import qualified Data.List as L
@@ -111,6 +109,7 @@ free f = S.difference (vars f) (bound f)
 binds :: Formula -> Term -> Bool
 binds f t = S.member t (vars f)
 
+-- Convert a Formula into Negation Normal Form (NNF.)
 nnf :: Formula -> Formula
 nnf (Not T) = F
 nnf (Not F) = T
@@ -123,6 +122,8 @@ nnf (Not (All t p)) = Formula.map nnf $ Exists t (Not p)
 nnf (Not (Exists t p)) = Formula.map nnf $ All t (Not p)
 nnf p = Formula.map nnf p
 
+-- Inverse prenexing, pushes quantifiers inwards as much as possible in one
+-- step. (NOT as much as possible in general.)
 miniscope :: Formula -> Formula
 miniscope f@(All t (And a b))
         | a `binds` t && b `binds` t = And (All t a) (All t b)
@@ -149,3 +150,15 @@ miniscope (All t f@(All _ _)) = miniscope (All t (miniscope f))
 miniscope (Exists t f@(All _ _)) = miniscope (Exists t (miniscope f))
 miniscope (Exists t f@(Exists _ _)) = miniscope (Exists t (miniscope f))
 miniscope p = Formula.map miniscope p
+
+-- Groups together universal quantifiers separated by disjunctions and
+-- existential quantifiers separated by conjunctions.
+partialPrenex :: Formula -> Formula
+partialPrenex (Or (All t p) q) = All t (partialPrenex (Or p q))
+partialPrenex (Or p (All t q)) = All t (partialPrenex (Or p q))
+partialPrenex (And (Exists t p) q) = Exists t (partialPrenex (And p q))
+partialPrenex (And p (Exists t q)) = Exists t (partialPrenex (And p q))
+partialPrenex p =
+    if p' /= p then partialPrenex $ p' else p'
+    where
+        p' = Formula.map partialPrenex p

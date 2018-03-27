@@ -69,11 +69,32 @@ formula4 =
     )
     where x = F.Variable "x"
 
+formula5 :: F.Formula
+formula5 =
+    F.Or (
+        F.Pred "P" [x]
+    ) (
+        F.All x (
+            F.Or (
+                F.Pred "P" [x]
+            ) (
+                F.All y (
+                    F.Pred "Q" [y]
+                )
+            )
+        )
+    )
+    where x = F.Variable "x"
+          y = F.Variable "y"
+
 someFunc :: IO ()
 someFunc = do
-    putStrLn $ "Original formula " ++ show formula2
-    let n2 = F.nnf formula2
-    putStrLn $ "NNF formula " ++ show n2
-    let m2 = F.miniscope n2
-    putStrLn $ "Miniscoped formula " ++ show m2
-    putStrLn . show $ F.miniscope formula4
+    -- putStrLn $ "Original formula " ++ show formula2
+    -- let n2 = F.nnf formula2
+    -- putStrLn $ "NNF formula " ++ show n2
+    -- let m2 = F.miniscope n2
+    -- putStrLn $ "Miniscoped formula " ++ show m2
+    -- putStrLn . show $ F.miniscope formula4
+    putStrLn $ show formula5
+    putStrLn $ show (F.partialPrenex formula5)
+
