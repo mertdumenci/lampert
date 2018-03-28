@@ -6,11 +6,13 @@ module Formula (
     Formula (..),
     nnf,
     miniscope,
-    sort
+    sort,
+    partialPrenex
 ) where
 
 import qualified Data.List as L
 import Data.Char
+import Data.Maybe
 import qualified Data.Set as S
 import qualified Data.Map as M
 
@@ -235,7 +237,8 @@ inNumConj p t = if p `binds` t then 1 else 0
 type ExistsP = (Term, Int)
 deconsExists :: Formula -> ([ExistsP], Formula)
 deconsExists (Exists ta (Exists tb p)) =
-    ([(ta, inNumConj p ta), (tb, inNumConj p tb)] ++ fst (deconsExists p), p)
+    let (more, innerFormula) = deconsExists p in
+    ([(ta, inNumConj p ta), (tb, inNumConj p tb)] ++ more, innerFormula)
 deconsExists (Exists ta p) = ([(ta, inNumConj p ta)], p)
 deconsExists f = ([], f)
 
@@ -248,7 +251,8 @@ reconsExists [] p = p
 type AllP = (Term, Int)
 deconsAll :: Formula -> ([AllP], Formula)
 deconsAll (All ta (All tb p)) =
-    ([(ta, inNumDisj p ta), (tb, inNumDisj p tb)] ++ fst (deconsAll p), p)
+    let (more, innerFormula) = deconsAll p in
+        ([(ta, inNumDisj p ta), (tb, inNumDisj p tb)] ++ more, innerFormula)
 deconsAll (All ta p) = ([(ta, inNumDisj p ta)], p)
 deconsAll f = ([], f)
 
@@ -283,26 +287,31 @@ reconsConj ((p, _):is)
 
 -- | Prenex sorting + scope sorting.
 sort :: Formula -> Formula
-sort f@(Exists _ (Exists _ _)) =
+sort = sort' . partialPrenex
+
+sort' :: Formula -> Formula
+sort' f@(Exists _ (Exists _ _)) =
     reconsExists sortedQuantifierVars (sort sortedP)
     where
         (quantifierVars, p) = deconsExists f
         scopeMap = M.fromList quantifierVars
-        key (_, conjunctVars) = minimum (S.map (scopeMap M.!) conjunctVars)
+        scope v = fromMaybe 0 (M.lookup v scopeMap)
+        key (_, conjunctVars) = minimum (S.map scope conjunctVars)
 
         sortedConjuncts = reverse (L.sortOn key (deconsConj p))
         sortedP = if isAnd p then reconsConj sortedConjuncts else p
 
         sortedQuantifierVars = reverse (L.sortOn snd quantifierVars)
-sort f@(All _ (All _ _)) =
+sort' f@(All _ (All _ _)) =
     reconsAll sortedQuantifierVars (sort sortedP)
     where
         (quantifierVars, p) = deconsAll f
         scopeMap = M.fromList quantifierVars
-        key (_, disjunctVars) = minimum (S.map (scopeMap M.!) disjunctVars)
+        scope v = fromMaybe 0 (M.lookup v scopeMap)
+        key (_, disjunctVars) = minimum (S.map scope disjunctVars)
 
         sortedDisjuncts = reverse (L.sortOn key (deconsDisj p))
         sortedP = if isOr p then reconsDisj sortedDisjuncts else p
 
         sortedQuantifierVars = reverse (L.sortOn snd quantifierVars)
-sort f = Formula.map sort f
+sort' f = Formula.map sort' f
