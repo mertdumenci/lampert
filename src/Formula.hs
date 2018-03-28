@@ -7,8 +7,9 @@ module Formula (
     nnf,
     miniscope,
     sort,
-    partialPrenex,
-    pushExists
+    convertScope,
+    rename,
+    purify
 ) where
 
 import qualified Data.List as L
@@ -208,12 +209,11 @@ partialPrenex p =
     where
         p' = Formula.map partialPrenex p
 
--- TODO(mert): All fresh variables are named $k^(n)$. This is not ideal, find a
+-- TODO(mert): All fresh variables are named $k{n}$. This is not ideal, find a
 -- better solution.
 freshVariable :: Int -> Term
 freshVariable i = Variable (newName i)
-    where newName 0 = "k"
-          newName n = newName (n - 1) ++ "'"
+    where newName n = "k" ++ show n
 
 mapVariable :: (Term -> Term) -> Formula -> Formula
 mapVariable m (Pred s ts) = Pred s (m <$> ts)
@@ -334,3 +334,35 @@ sort' f@(All _ (All _ _)) =
 
         sortedQuantifierVars = reverse (L.sortOn snd quantifierVars)
 sort' f = Formula.map sort' f
+
+cnf :: Formula -> Formula
+cnf = \case
+    (Or (And p q) z) -> And (cnf $ Or p z) (cnf $ Or q z)
+    (Or p (And q z)) -> And (cnf $ Or p q) (cnf $ Or p z)
+    f -> Formula.map cnf f
+
+dnf :: Formula -> Formula
+dnf = \case
+    (And (Or p q) z) -> Or (dnf $ And p z) (dnf $ And q z)
+    (And p (Or q z)) -> Or (dnf $ And p q) (dnf $ And p z)
+    f -> Formula.map dnf f
+
+-- | Scope conversion.
+convertScope :: Formula -> Formula
+convertScope f = case f of
+    (All t (Or p q)) | p `binds` t && q `binds` t -> Formula.map cnf f
+    (Exists t (And p q)) | p `binds` t && q `binds` t -> Formula.map dnf f
+    _ -> if f' /= f then convertScope f' else f'
+    where
+        f' = Formula.map convertScope f
+
+stable :: (Eq a) => (a -> a) -> a -> a
+stable f x = if y' == x then y' else stable f y'
+    where y' = f x
+
+-- | Purify.
+purify :: Formula -> Formula
+purify f = rename . dnf $ f'
+    where f' = stable (convertScope . miniscope . sort . miniscope . nnf) f
+
+    

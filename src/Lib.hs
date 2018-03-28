@@ -130,20 +130,25 @@ formula8 =
 
 someFunc :: IO ()
 someFunc = do
-    -- let n2 = F.nnf formula2
-    -- putStrLn $ "NNF formula " ++ show n2
-    -- let m2 = F.miniscope n2
-    -- putStrLn $ "Miniscoped formula " ++ show m2
-    -- let r2 = F.rename formula6
-    -- putStrLn $ "Renamed formula " ++ show r2
-    -- putStrLn $ "Original formula: " ++ show formula7
-    -- putStrLn $ "Sorted formula: " ++ show (F.sort formula7)
-
-    let nnf = F.nnf formula8
-    -- let miniscope1 = F.miniscope nnf
-    let sorted = F.sort nnf
-    let miniscope2 = F.miniscope sorted
-
-    print nnf
-    print sorted
-    print miniscope2
+    -- let nnf = F.nnf formula2
+    -- putStrLn $ "NNF: " ++ show nnf
+    -- let m1 = F.miniscope nnf
+    -- putStrLn $ "First miniscope: " ++ show m1
+    -- let sorted = F.sort m1
+    -- putStrLn $ "Sorted: " ++ show sorted
+    -- let m2 = F.miniscope sorted
+    -- putStrLn $ "Second miniscope: " ++ show m2
+    -- let sc = F.convertScope m2
+    -- putStrLn $ "Scope conversion: " ++ show sc
+    -- print " ---- "
+    -- let m3 = F.miniscope sc
+    -- putStrLn $ "Third miniscope: " ++ show m3
+    -- let sorted2 = F.sort m3
+    -- putStrLn $ "Second sorted: " ++ show m3
+    -- let m4 = F.miniscope sorted2
+    -- putStrLn $ "Fourth miniscope: " ++ show m4
+    -- let sc2 = F.convertScope m4
+    -- putStrLn $ "Second scope conversion: " ++ show sc2
+    -- let m5 = F.miniscope sc2
+    print formula2
+    print (F.purify formula2)
