@@ -6,12 +6,13 @@ module Formula (
     Formula (..),
     nnf,
     miniscope,
-    quantifierSort
+    sort
 ) where
 
 import qualified Data.List as L
 import Data.Char
 import qualified Data.Set as S
+import qualified Data.Map as M
 
 data Term =
     Constant String
@@ -40,6 +41,14 @@ data Formula =
     | Exists Term Formula
     | All Term Formula
     deriving (Eq, Ord)
+
+isAnd :: Formula -> Bool
+isAnd (And _ _) = True
+isAnd _ = False
+
+isOr :: Formula -> Bool
+isOr (Or _ _) = True
+isOr _ = False
 
 map :: (Formula -> Formula) -> Formula -> Formula
 map f = \case
@@ -214,7 +223,7 @@ rename' (All t f') i = All fv $ rename' (replaceVariable t fv f') (i + 1)
 
 -- | Returns the number of immediate disjuncts the given term is in.
 inNumDisj :: Formula -> Term -> Int
-inNumDisj (Or p q) t = inNumDisj p t + inNumDisj q t 
+inNumDisj (Or p q) t = inNumDisj p t + inNumDisj q t
 inNumDisj p t = if p `binds` t then 1 else 0
 
 -- | Returns the number of immediate conjuncts the given term is in.
@@ -223,37 +232,77 @@ inNumConj (And p q) t = inNumConj p t + inNumConj q t
 inNumConj p t = if p `binds` t then 1 else 0
 
 -- | Deconstructs a sequence of `Exists`s.
-type ExistsP = (Int, Term)
-deconsSeqExists :: Formula -> ([ExistsP], Formula)
-deconsSeqExists (Exists ta (Exists tb p)) =
-    ([(inNumConj p ta, ta), (inNumConj p tb, tb)] ++ fst (deconsSeqExists p), p)
-deconsSeqExists (Exists ta p) = ([(inNumConj p ta, ta)], p)
-deconsSeqExists f = ([], f)
+type ExistsP = (Term, Int)
+deconsExists :: Formula -> ([ExistsP], Formula)
+deconsExists (Exists ta (Exists tb p)) =
+    ([(ta, inNumConj p ta), (tb, inNumConj p tb)] ++ fst (deconsExists p), p)
+deconsExists (Exists ta p) = ([(ta, inNumConj p ta)], p)
+deconsExists f = ([], f)
 
--- | Reconstructs a `Formula` from the output of `deconsSeqExists`.
-reconsSeqExists :: [ExistsP] -> Formula -> Formula
-reconsSeqExists ((_, t):ds) p = Exists t (reconsSeqExists ds p)
-reconsSeqExists [] p = p
+-- | Reconstructs a `Formula` from the output of `deconsExists`.
+reconsExists :: [ExistsP] -> Formula -> Formula
+reconsExists ((t, _):ds) p = Exists t (reconsExists ds p)
+reconsExists [] p = p
 
 -- | Deconstructs a sequence of `All`s.
-type AllP = (Int, Term)
-deconsSeqAll :: Formula -> ([AllP], Formula)
-deconsSeqAll (All ta (All tb p)) =
-    ([(inNumConj p ta, ta), (inNumConj p tb, tb)] ++ fst (deconsSeqAll p), p)
-deconsSeqAll (All ta p) = ([(inNumConj p ta, ta)], p)
-deconsSeqAll f = ([], f)
+type AllP = (Term, Int)
+deconsAll :: Formula -> ([AllP], Formula)
+deconsAll (All ta (All tb p)) =
+    ([(ta, inNumDisj p ta), (tb, inNumDisj p tb)] ++ fst (deconsAll p), p)
+deconsAll (All ta p) = ([(ta, inNumDisj p ta)], p)
+deconsAll f = ([], f)
 
--- | Reconstructs a `Formula` from the output of `deconsSeqAll`.
-reconsSeqAll :: [AllP] -> Formula -> Formula
-reconsSeqAll ((_, t):ds) p = All t (reconsSeqAll ds p)
-reconsSeqAll [] p = p
+-- | Reconstructs a `Formula` from the output of `deconsAll`.
+reconsAll :: [AllP] -> Formula -> Formula
+reconsAll ((t, _):ds) p = All t (reconsAll ds p)
+reconsAll [] p = p
 
--- | Sort the quantifiers of a `Formula`. (Prenex sorting)
-quantifierSort :: Formula -> Formula
-quantifierSort f@(Exists _ (Exists _ p)) =
-    reconsSeqExists st (quantifierSort p)
-    where st = reverse (L.sortOn fst (fst (deconsSeqExists f)))
-quantifierSort f@(All _ (All _ p)) =
-    reconsSeqAll st (quantifierSort p)
-    where st = reverse (L.sortOn fst (fst (deconsSeqAll f)))
-quantifierSort f = Formula.map quantifierSort f
+-- | Deconstructs a disjunction into a list.
+type DisjI = (Formula, S.Set Term)
+deconsDisj :: Formula -> [DisjI]
+deconsDisj (And p q) = deconsDisj p ++ deconsDisj q
+deconsDisj p = [(p, vars p)]
+
+-- | Reconstructs a disjunction from a list.
+reconsDisj :: [DisjI] -> Formula
+reconsDisj ((p, _):is)
+    | L.null is = p
+    | otherwise = Or p (reconsDisj is)
+
+-- | Deconstructs a conjunction into a list.
+type ConjI = (Formula, S.Set Term)
+deconsConj :: Formula -> [ConjI]
+deconsConj (And p q) = deconsConj p ++ deconsConj q
+deconsConj p = [(p, vars p)]
+
+-- | Reconstructs a conjunction from a list.
+reconsConj :: [ConjI] -> Formula
+reconsConj ((p, _):is)
+    | L.null is = p
+    | otherwise = And p (reconsConj is)
+
+-- | Prenex sorting + scope sorting.
+sort :: Formula -> Formula
+sort f@(Exists _ (Exists _ _)) =
+    reconsExists sortedQuantifierVars (sort sortedP)
+    where
+        (quantifierVars, p) = deconsExists f
+        scopeMap = M.fromList quantifierVars
+        key (_, conjunctVars) = minimum (S.map (scopeMap M.!) conjunctVars)
+
+        sortedConjuncts = reverse (L.sortOn key (deconsConj p))
+        sortedP = if isAnd p then reconsConj sortedConjuncts else p
+
+        sortedQuantifierVars = reverse (L.sortOn snd quantifierVars)
+sort f@(All _ (All _ _)) =
+    reconsAll sortedQuantifierVars (sort sortedP)
+    where
+        (quantifierVars, p) = deconsAll f
+        scopeMap = M.fromList quantifierVars
+        key (_, disjunctVars) = minimum (S.map (scopeMap M.!) disjunctVars)
+
+        sortedDisjuncts = reverse (L.sortOn key (deconsDisj p))
+        sortedP = if isOr p then reconsDisj sortedDisjuncts else p
+
+        sortedQuantifierVars = reverse (L.sortOn snd quantifierVars)
+sort f = Formula.map sort f

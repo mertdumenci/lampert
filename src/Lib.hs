@@ -115,4 +115,4 @@ someFunc = do
     -- let r2 = F.rename formula6
     -- putStrLn $ "Renamed formula " ++ show r2
     putStrLn $ "Original formula: " ++ show formula7
-    putStrLn $ "Quantifier sorted: " ++ show (F.quantifierSort formula7)
+    putStrLn $ "Sorted formula: " ++ show (F.sort formula7)
