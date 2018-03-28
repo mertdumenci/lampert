@@ -7,7 +7,8 @@ module Formula (
     nnf,
     miniscope,
     sort,
-    partialPrenex
+    partialPrenex,
+    pushExists
 ) where
 
 import qualified Data.List as L
@@ -15,6 +16,8 @@ import Data.Char
 import Data.Maybe
 import qualified Data.Set as S
 import qualified Data.Map as M
+
+import Debug.Trace
 
 data Term =
     Constant String
@@ -118,7 +121,7 @@ free :: Formula -> S.Set Term
 free f = S.difference (vars f) (bound f)
 
 binds :: Formula -> Term -> Bool
-binds f t = S.member t (vars f)
+binds f t = S.member t (free f)
 
 -- Number of quantifiers in a `Formula`.
 numQuantifiers :: Formula -> Int
@@ -151,31 +154,47 @@ nnf p = Formula.map nnf p
 -- Inverse prenexing, pushes quantifiers inwards as much as possible in one
 -- step. (NOT as much as possible in general.)
 miniscope :: Formula -> Formula
-miniscope f@(All t (And a b))
-        | a `binds` t && b `binds` t = And (All t a) (All t b)
-        | a `binds` t = And (All t a) b
-        | b `binds` t = And a (All t b)
-        | otherwise = f
-miniscope f@(Exists t (Or a b))
-        | a `binds` t && b `binds` t = Or (Exists t a) (Exists t b)
-        | a `binds` t = Or (Exists t a) b
-        | b `binds` t = Or a (Exists t b)
-        | otherwise = f
-miniscope f@(All t (Or a b))
-        | a `binds` t && b `binds` t = f
-        | a `binds` t = Or (All t a) b
-        | b `binds` t = Or a (All t b)
-        | otherwise = f
-miniscope f@(Exists t (And a b))
-        | a `binds` t && b `binds` t = f
-        | a `binds` t = And (Exists t a) b
-        | b `binds` t = And a (Exists t b)
-        | otherwise = f
-miniscope (All t f@(Exists _ _)) = miniscope (All t (miniscope f))
-miniscope (All t f@(All _ _)) = miniscope (All t (miniscope f))
-miniscope (Exists t f@(All _ _)) = miniscope (Exists t (miniscope f))
-miniscope (Exists t f@(Exists _ _)) = miniscope (Exists t (miniscope f))
+miniscope (All t p) = pushAll t (miniscope p)
+miniscope (Exists t p) = pushExists t (miniscope p)
 miniscope p = Formula.map miniscope p
+
+pushExists :: Term -> Formula -> Formula
+pushExists t f =
+    if push == f then Exists t f else push
+    where
+    push = case f of
+        (Or a b) | a `binds` t && b `binds` t ->
+            Or (pushExists t a) (pushExists t b)
+        (Or a b) | a `binds` t ->
+            Or (pushExists t a) b
+        (Or a b) | b `binds` t ->
+            Or a (pushExists t b)
+        (And a b) | a `binds` t && b `binds` t ->
+            f
+        (And a b) | a `binds` t ->
+            And (pushExists t a) b
+        (And a b) | b `binds` t ->
+            And a (pushExists t b)
+        _ -> f
+
+pushAll :: Term -> Formula -> Formula
+pushAll t f =
+    if push == f then All t f else push
+    where
+    push = case f of
+        (Or a b) | a `binds` t && b `binds` t ->
+            f
+        (Or a b) | a `binds` t ->
+            Or (pushAll t a) b
+        (Or a b) | b `binds` t ->
+            Or a (pushAll t b)
+        (And a b) | a `binds` t && b `binds` t ->
+            And (pushAll t a) (pushAll t b)
+        (And a b) | a `binds` t ->
+            And (pushAll t a) b
+        (And a b) | b `binds` t ->
+            And a (pushAll t b)
+        _ -> f
 
 -- Groups together universal quantifiers separated by disjunctions and
 -- existential quantifiers separated by conjunctions.
@@ -287,7 +306,7 @@ reconsConj ((p, _):is)
 
 -- | Prenex sorting + scope sorting.
 sort :: Formula -> Formula
-sort = sort' . partialPrenex
+sort = sort' . rename . partialPrenex
 
 sort' :: Formula -> Formula
 sort' f@(Exists _ (Exists _ _)) =
