@@ -134,10 +134,10 @@ deconsOr (And p q) = deconsOr p ++ deconsOr q
 deconsOr p = [(p, vars p)]
 
 -- | Reconstructs a disjunction from the output of @deconsOr@.
-reconsDisj :: [OrP] -> Formula
-reconsDisj ((p, _):is)
+reconsOr :: [OrP] -> Formula
+reconsOr ((p, _):is)
     | L.null is = p
-    | otherwise = Or p (reconsDisj is)
+    | otherwise = Or p (reconsOr is)
 
 type AndP = (Formula, S.Set Term)
 -- | Deconstructs a conjunction a list of (conjunct, vars in conjunct)
@@ -147,10 +147,10 @@ deconsAnd (And p q) = deconsAnd p ++ deconsAnd q
 deconsAnd p = [(p, vars p)]
 
 -- | Reconstructs a conjunction from the output of @deconsAnd@.
-reconsConj :: [AndP] -> Formula
-reconsConj ((p, _):is)
+reconsAnd :: [AndP] -> Formula
+reconsAnd ((p, _):is)
     | L.null is = p
-    | otherwise = And p (reconsConj is)
+    | otherwise = And p (reconsAnd is)
 
 -- | Combines the quantifier and scope sorting steps in Lampert (2017) p. 8.
 -- and renames the quantified variables such that no two quantifiers bind
@@ -182,7 +182,7 @@ sort' f@(Exists _ (Exists _ _)) =
         key (_, conjunctVars) = minimum (S.map scope conjunctVars)
 
         sortedConjuncts = reverse (L.sortOn key (deconsAnd p))
-        sortedP = if isAnd p then reconsConj sortedConjuncts else p
+        sortedP = if isAnd p then reconsAnd sortedConjuncts else p
 
         sortedQuantifierVars = reverse (L.sortOn snd quantifierVars)
 sort' f@(Forall _ (Forall _ _)) =
@@ -194,7 +194,7 @@ sort' f@(Forall _ (Forall _ _)) =
         key (_, disjunctVars) = minimum (S.map scope disjunctVars)
 
         sortedDisjuncts = reverse (L.sortOn key (deconsOr p))
-        sortedP = if isOr p then reconsDisj sortedDisjuncts else p
+        sortedP = if isOr p then reconsOr sortedDisjuncts else p
 
         sortedQuantifierVars = reverse (L.sortOn snd quantifierVars)
 sort' f = Formula.map sort' f
