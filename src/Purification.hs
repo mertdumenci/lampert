@@ -5,6 +5,8 @@
     conditions.
 -}
 
+{-# LANGUAGE UnicodeSyntax #-}
+
 module Purification (
     purify
 ) where
@@ -19,56 +21,56 @@ import qualified Data.Set as S
 -- by recursive application of the inverse PN laws.
 -- (Note that this doesn't mean that the quantifiers are pushed as much
 -- as possible in general.)
-miniscope :: Formula -> Formula
+miniscope :: Formula → Formula
 miniscope (Forall t p) = pushForall t (miniscope p)
 miniscope (Exists t p) = pushExists t (miniscope p)
 miniscope p = Formula.map miniscope p
 
 -- | Pushes an existential quantifier as much as possible inside a
 -- formula (by recursive application of the inverse PN laws.)
-pushExists :: Term -> Formula -> Formula
+pushExists :: Term → Formula → Formula
 pushExists t f =
     if push == f then Exists t f else push
     where
     push = case f of
-        (Or a b) | a `binds` t && b `binds` t ->
+        (Or a b) | a `binds` t && b `binds` t →
             Or (pushExists t a) (pushExists t b)
-        (Or a b) | a `binds` t ->
+        (Or a b) | a `binds` t →
             Or (pushExists t a) b
-        (Or a b) | b `binds` t ->
+        (Or a b) | b `binds` t →
             Or a (pushExists t b)
-        (And a b) | a `binds` t && b `binds` t ->
+        (And a b) | a `binds` t && b `binds` t →
             f
-        (And a b) | a `binds` t ->
+        (And a b) | a `binds` t →
             And (pushExists t a) b
-        (And a b) | b `binds` t ->
+        (And a b) | b `binds` t →
             And a (pushExists t b)
-        _ -> f
+        _ → f
 
 -- | Pushes a universal quantifier as much as possible inside a
 -- formula (by recursive application of the inverse PN laws.)
-pushForall :: Term -> Formula -> Formula
+pushForall :: Term → Formula → Formula
 pushForall t f =
     if push == f then Forall t f else push
     where
     push = case f of
-        (Or a b) | a `binds` t && b `binds` t ->
+        (Or a b) | a `binds` t && b `binds` t →
             f
-        (Or a b) | a `binds` t ->
+        (Or a b) | a `binds` t →
             Or (pushForall t a) b
-        (Or a b) | b `binds` t ->
+        (Or a b) | b `binds` t →
             Or a (pushForall t b)
-        (And a b) | a `binds` t && b `binds` t ->
+        (And a b) | a `binds` t && b `binds` t →
             And (pushForall t a) (pushForall t b)
-        (And a b) | a `binds` t ->
+        (And a b) | a `binds` t →
             And (pushForall t a) b
-        (And a b) | b `binds` t ->
+        (And a b) | b `binds` t →
             And a (pushForall t b)
-        _ -> f
+        _ → f
 
 -- | Groups together universal quantifiers separated by disjunctions
 -- and existential quantifiers separated by conjunctions.
-partialPrenex :: Formula -> Formula
+partialPrenex :: Formula → Formula
 partialPrenex (Or (Forall t p) q) = Forall t (partialPrenex (Or p q))
 partialPrenex (Or p (Forall t q)) = Forall t (partialPrenex (Or p q))
 partialPrenex (And (Exists t p) q) = Exists t (partialPrenex (And p q))
@@ -85,7 +87,7 @@ type ExistsP = (Term, Int)
 --
 -- e.g. @deconsExists@ (ExEyEz. Fx ∧ Qxy ∧ Fz) =
 --          ([(x, 2), (y, 1), (z, 1)], Fx ∧ Qxy ∧ Fz)
-deconsExists :: Formula -> ([ExistsP], Formula)
+deconsExists :: Formula → ([ExistsP], Formula)
 deconsExists (Exists ta (Exists tb p)) =
     let (more, innerFormula) = deconsExists p in
     ([(ta, bindsNumConj p ta), (tb, bindsNumConj p tb)] ++ more, innerFormula)
@@ -93,17 +95,17 @@ deconsExists (Exists ta p) = ([(ta, bindsNumConj p ta)], p)
 deconsExists f = ([], f)
 
 -- | Reconstructs a formula from the output of @deconsExists@.
-reconsExists :: [ExistsP] -> Formula -> Formula
+reconsExists :: [ExistsP] → Formula → Formula
 reconsExists ((t, _):ds) p = Exists t (reconsExists ds p)
 reconsExists [] p = p
 
 -- | Finds the number of disjuncts a variable binds in a disjunction.
-bindsNumDisj :: Formula -> Term -> Int
+bindsNumDisj :: Formula → Term → Int
 bindsNumDisj (Or p q) t = bindsNumDisj p t + bindsNumDisj q t
 bindsNumDisj p t = if p `binds` t then 1 else 0
 
 -- | Finds the number of conjuncts a variable binds in a conjunction.
-bindsNumConj :: Formula -> Term -> Int
+bindsNumConj :: Formula → Term → Int
 bindsNumConj (And p q) t = bindsNumConj p t + bindsNumConj q t
 bindsNumConj p t = if p `binds` t then 1 else 0
 
@@ -114,7 +116,7 @@ type ForallP = (Term, Int)
 --
 -- e.g. @deconsForall@ (AxAyAz. Fx ∨ Qxy ∨ Fz) =
 --          ([(x, 2), (y, 1), (z, 1)], Fx ∨ Qxy ∨ Fz)
-deconsForall :: Formula -> ([ForallP], Formula)
+deconsForall :: Formula → ([ForallP], Formula)
 deconsForall (Forall ta (Forall tb p)) =
     let (more, innerFormula) = deconsForall p in
         ([(ta, bindsNumDisj p ta), (tb, bindsNumDisj p tb)] ++ more, innerFormula)
@@ -122,19 +124,19 @@ deconsForall (Forall ta p) = ([(ta, bindsNumDisj p ta)], p)
 deconsForall f = ([], f)
 
 -- | Reconstructs a formula from the output of @deconsForall@.
-reconsForall :: [ForallP] -> Formula -> Formula
+reconsForall :: [ForallP] → Formula → Formula
 reconsForall ((t, _):ds) p = Forall t (reconsForall ds p)
 reconsForall [] p = p
 
 type OrP = (Formula, S.Set Term)
 -- | Deconstructs a disjunction into a list of (disjunct, vars in disjunct)
 -- pairs.
-deconsOr :: Formula -> [OrP]
+deconsOr :: Formula → [OrP]
 deconsOr (And p q) = deconsOr p ++ deconsOr q
 deconsOr p = [(p, vars p)]
 
 -- | Reconstructs a disjunction from the output of @deconsOr@.
-reconsOr :: [OrP] -> Formula
+reconsOr :: [OrP] → Formula
 reconsOr ((p, _):is)
     | L.null is = p
     | otherwise = Or p (reconsOr is)
@@ -142,12 +144,12 @@ reconsOr ((p, _):is)
 type AndP = (Formula, S.Set Term)
 -- | Deconstructs a conjunction a list of (conjunct, vars in conjunct)
 -- pairs.
-deconsAnd :: Formula -> [AndP]
+deconsAnd :: Formula → [AndP]
 deconsAnd (And p q) = deconsAnd p ++ deconsAnd q
 deconsAnd p = [(p, vars p)]
 
 -- | Reconstructs a conjunction from the output of @deconsAnd@.
-reconsAnd :: [AndP] -> Formula
+reconsAnd :: [AndP] → Formula
 reconsAnd ((p, _):is)
     | L.null is = p
     | otherwise = And p (reconsAnd is)
@@ -168,11 +170,11 @@ reconsAnd ((p, _):is)
 --
 -- e.g. @sort@ (ExEyEz. Fz ∧ (ApAqAw. Qwz ∨ Fp ∨ Qwq) ∧ Qzy ∧ Qxy) =
 --           (EzEyEx. Fz ∧ (AwApAq. Qwz ∨ Fp ∨ Qwq) ∧ Qzy ∧ Qxy)
-sort :: Formula -> Formula
+sort :: Formula → Formula
 sort = sort' . rename . partialPrenex
 
 -- TODO(mert): Add comments to this process.
-sort' :: Formula -> Formula
+sort' :: Formula → Formula
 sort' f@(Exists _ (Exists _ _)) =
     reconsExists sortedQuantifierVars (sort sortedP)
     where
@@ -207,21 +209,21 @@ sort' f = Formula.map sort' f
 -- If a conjunction is existentially quantified such that the quantified
 -- variable binds both conjuncts (Ax. Fx ∧ Qx), convert the inner formula to a
 -- DNF.
-convertScope :: Formula -> Formula
+convertScope :: Formula → Formula
 convertScope f = case f of
-    (Forall t (Or p q)) | p `binds` t && q `binds` t -> Formula.map cnf f
-    (Exists t (And p q)) | p `binds` t && q `binds` t -> Formula.map dnf f
-    _ -> if f' /= f then convertScope f' else f'
+    (Forall t (Or p q)) | p `binds` t && q `binds` t → Formula.map cnf f
+    (Exists t (And p q)) | p `binds` t && q `binds` t → Formula.map dnf f
+    _ → if f' /= f then convertScope f' else f'
     where
         f' = Formula.map convertScope f
 
 -- | Apply a function on a value repeatedly until you find a fixpoint.
-stable :: (Eq a) => (a -> a) -> a -> a
+stable :: (Eq a) ⇒ (a → a) → a → a
 stable f x = if x' == x then x' else stable f x'
     where x' = f x
 
 -- | The full purification process detailed in Lampert (2017) p. 8. Takes any
 -- @Formula@, and returns a FOLDNF.
-purify :: Formula -> Formula
+purify :: Formula → Formula
 purify f = rename . dnf $ f'
     where f' = stable (convertScope . miniscope . sort . miniscope . nnf) f

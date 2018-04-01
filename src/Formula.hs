@@ -3,6 +3,8 @@
     operations (NNF, DNF, CNF, etc.)
 -}
 
+{-# LANGUAGE UnicodeSyntax #-}
+
 module Formula (
     Term (..),
     Formula (..),
@@ -53,17 +55,17 @@ data Formula =
     deriving (Eq, Ord)
 
 -- | Whether or not the given formula is a conjunction.
-isAnd :: Formula -> Bool
+isAnd :: Formula → Bool
 isAnd (And _ _) = True
 isAnd _ = False
 
 -- | Whether or not the given formula is a disjunction.
-isOr :: Formula -> Bool
+isOr :: Formula → Bool
 isOr (Or _ _) = True
 isOr _ = False
 
 -- | Applies a formula transformation on the subformulas of a formula.
-map :: (Formula -> Formula) -> Formula -> Formula
+map :: (Formula → Formula) → Formula → Formula
 map f (Not p) = Not (f p)
 map f (And p q) = And (f p) (f q)
 map f (Or p q) = Or (f p) (f q)
@@ -87,14 +89,14 @@ instance Show Formula where
     show (Impl p q) =
         show p ++ " -> " ++ show q
     show (Iff p q) =
-        show p ++ " <-> " ++ show q
+        show p ++ " <=> " ++ show q
     show (Exists t p) =
         "E" ++ show t ++ ". (" ++ show p ++ ")"
     show (Forall t p) =
         "A" ++ show t ++ ". (" ++ show p ++ ")"
 
 -- | Finds all variables in a formula. (Free and bound.)
-vars :: Formula -> S.Set Term
+vars :: Formula → S.Set Term
 vars f =
     vars' f S.empty
     where
@@ -112,7 +114,7 @@ vars f =
         vars' _ s = s
 
 -- | Finds all bound variables in a formula.
-bound :: Formula -> S.Set Term
+bound :: Formula → S.Set Term
 bound f =
     bound' f S.empty
     where
@@ -126,16 +128,16 @@ bound f =
         bound' _ s = s
 
 -- | Finds all free variables in a formula.
-free :: Formula -> S.Set Term
+free :: Formula → S.Set Term
 free f = S.difference (vars f) (bound f)
 
 -- | Whether or not a given variable @t@ binds a given formula @p@.
 -- (i.e. @t@ ∈ Free(p))
-binds :: Formula -> Term -> Bool
+binds :: Formula → Term → Bool
 binds p t = S.member t (free p)
 
 -- | Finds the total number of quantifiers in a formula. (Recursively.)
-numQuantifiers :: Formula -> Int
+numQuantifiers :: Formula → Int
 numQuantifiers T = 0
 numQuantifiers F = 0
 numQuantifiers (Pred _ _) = 0
@@ -148,7 +150,7 @@ numQuantifiers (Forall _ p) = numQuantifiers p + 1
 numQuantifiers (Exists _ p) = numQuantifiers p + 1
 
 -- | Converts a formula into Negation Normal Form (NNF.)
-nnf :: Formula -> Formula
+nnf :: Formula → Formula
 nnf (Not T) = F
 nnf (Not F) = T
 nnf (Not (Not p)) = nnf p
@@ -161,40 +163,40 @@ nnf (Not (Exists t p)) = Formula.map nnf $ Forall t (Not p)
 nnf p = Formula.map nnf p
 
 -- | Converts a formula into Conjunctive Normal Form (CNF.)
-cnf :: Formula -> Formula
+cnf :: Formula → Formula
 cnf (Or (And p q) z) = And (cnf $ Or p z) (cnf $ Or q z)
 cnf (Or p (And q z)) = And (cnf $ Or p q) (cnf $ Or p z)
 cnf p = Formula.map cnf p
 
 -- | Converts a formula into Disjunctive Normal Form (DNF.)
-dnf :: Formula -> Formula
+dnf :: Formula → Formula
 dnf (And (Or p q) z) = Or (dnf $ And p z) (dnf $ And q z)
 dnf (And p (Or q z)) = Or (dnf $ And p q) (dnf $ And p z)
 dnf p = Formula.map dnf p
 
 -- | Generates a new variable @k{n}@ where @n@ is given.
 -- TODO(mert): @k{n}@ might exist in the original formula. Find a better way.
-freshVariable :: Int -> Term
+freshVariable :: Int → Term
 freshVariable n = Variable ("k" ++ show n)
 
 -- | Applies a term transformation on every term in a formula.
-mapTerm :: (Term -> Term) -> Formula -> Formula
+mapTerm :: (Term → Term) → Formula → Formula
 mapTerm m (Pred s ts) = Pred s (m <$> ts)
 mapTerm m (Exists t p) = Exists (m t) (mapTerm m p)
 mapTerm m (Forall t p) = Forall (m t) (mapTerm m p)
 mapTerm m p = Formula.map (mapTerm m) p
 
 -- | Replaces all instances of term @s@ with a term @d@ in a formula.
-replaceTerm :: Term -> Term -> Formula -> Formula
-replaceTerm s d = mapTerm (\t -> if t == s then d else t)
+replaceTerm :: Term → Term → Formula → Formula
+replaceTerm s d = mapTerm (\t → if t == s then d else t)
 
 -- | Renames variables in a formula s.t. no two different quantifiers bind
 -- the same variable, using the algorithm described in
 -- Nonnengart & Weidenbach '01.
-rename :: Formula -> Formula
+rename :: Formula → Formula
 rename f = rename' f 1
 
-rename' :: Formula -> Int -> Formula
+rename' :: Formula → Int → Formula
 rename' f@(Pred _ _) _ = f
 rename' (Not p) i = Not (rename' p i)
 rename' (And p q) i = And (rename' p i) (rename' q (i + numQuantifiers p))
